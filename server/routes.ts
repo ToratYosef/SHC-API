@@ -133,6 +133,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use("/api", createOrdersRouter());
   app.use("/api", createWebhookRouter());
 
+  // ==================== HEALTH CHECK ====================
+  
+  app.get("/api/health", (req, res) => {
+    res.json({ 
+      status: "ok", 
+      timestamp: new Date().toISOString(),
+      service: "SecondHandCell API",
+      version: "1.0.0"
+    });
+  });
+
   // ==================== PUBLIC API ROUTES (No Auth Required) ====================
   
   // Get public categories
@@ -642,6 +653,69 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   app.get("/api/catalog/categories", getCategoriesHandler);
   app.get("/api/categories", getCategoriesHandler);
+
+  // Get brands (unique brands from device models)
+  app.get("/api/brands", async (req, res) => {
+    try {
+      const models = await storage.getAllDeviceModels();
+      const brandsSet = new Set(models.map(m => m.brand));
+      const brands = Array.from(brandsSet).map((brand, index) => ({
+        id: `brand-${index}`,
+        name: brand,
+        slug: brand.toLowerCase().replace(/\s+/g, '-'),
+      }));
+      res.json(brands);
+    } catch (error: any) {
+      console.error("Get brands error:", error);
+      res.status(500).json({ error: "Failed to get brands" });
+    }
+  });
+
+  // Get models by brand
+  app.get("/api/models", async (req, res) => {
+    try {
+      const { brandId } = req.query;
+      const models = await storage.getAllDeviceModels();
+      
+      // If brandId is provided, extract the brand name from it
+      let filteredModels = models;
+      if (brandId && typeof brandId === 'string') {
+        const brandName = brandId.replace('brand-', '').split('-').map(word => 
+          word.charAt(0).toUpperCase() + word.slice(1)
+        ).join(' ');
+        filteredModels = models.filter(m => m.brand === brandName);
+      }
+      
+      const result = filteredModels.map(m => ({
+        id: m.id,
+        brandId: `brand-${m.brand.toLowerCase().replace(/\s+/g, '-')}`,
+        name: m.marketingName || m.name,
+        slug: m.slug,
+        year: null,
+      }));
+      
+      res.json(result);
+    } catch (error: any) {
+      console.error("Get models error:", error);
+      res.status(500).json({ error: "Failed to get models" });
+    }
+  });
+
+  // Get device conditions
+  app.get("/api/conditions", async (req, res) => {
+    try {
+      const conditions = [
+        { id: 'A', name: 'Like New', description: 'Flawless condition, no visible wear' },
+        { id: 'B', name: 'Good', description: 'Minor signs of use, fully functional' },
+        { id: 'C', name: 'Fair', description: 'Moderate wear, fully functional' },
+        { id: 'D', name: 'Poor', description: 'Heavy wear but works' },
+      ];
+      res.json(conditions);
+    } catch (error: any) {
+      console.error("Get conditions error:", error);
+      res.status(500).json({ error: "Failed to get conditions" });
+    }
+  });
 
   // ==================== CART ROUTES ====================
   
