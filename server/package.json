@@ -1,0 +1,43 @@
+{
+  "name": "secondhandcell-server",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "NODE_ENV=development tsx index.ts",
+    "build": "esbuild index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist",
+    "start": "NODE_ENV=production node dist/index.js",
+    "seed": "NODE_ENV=development tsx seed.ts",
+    "test": "jest --runInBand"
+  },
+  "dependencies": {
+    "bcrypt": "^6.0.0",
+    "better-sqlite3": "^11.10.0",
+    "dotenv": "^17.2.3",
+    "drizzle-orm": "^0.39.1",
+    "esbuild": "^0.25.0",
+    "express": "^4.21.2",
+    "express-session": "^1.18.2",
+    "memorystore": "^1.6.7",
+    "nanoid": "^5.0.9",
+    "stripe": "^19.3.1",
+    "vite": "^5.4.20",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/bcrypt": "^6.0.0",
+    "@types/express": "4.17.21",
+    "@types/express-session": "^1.18.2",
+    "@types/node": "20.16.11",
+    "drizzle-kit": "^0.31.7",
+    "jest": "^29.0.0",
+    "supertest": "^6.3.3",
+    "tsx": "^4.20.5",
+    "typescript": "5.6.3"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "transform": {}
+  }
+}
