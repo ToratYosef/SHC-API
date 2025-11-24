@@ -17,6 +17,13 @@ import {
 import { db, sqlite } from "./db";
 import * as schema from "@shared/schema";
 
+// Import route modules from functions folder
+import { createEmailsRouter } from "./routes/emails";
+import { createImeiRouter } from "./routes/imei";
+import { createLabelsRouter } from "./routes/labels";
+import { createOrdersRouter } from "./routes/orders";
+import { createWebhookRouter } from "./routes/webhook";
+
 const slugify = (value: string) =>
   value
     .toLowerCase()
@@ -116,6 +123,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
     },
   }));
+
+  // ==================== REGISTER MIGRATED ROUTES FROM FUNCTIONS FOLDER ====================
+  
+  // Register all migrated route modules
+  app.use("/api", createEmailsRouter());
+  app.use("/api", createImeiRouter());
+  app.use("/api", createLabelsRouter());
+  app.use("/api", createOrdersRouter());
+  app.use("/api", createWebhookRouter());
 
   // ==================== PUBLIC API ROUTES (No Auth Required) ====================
   
