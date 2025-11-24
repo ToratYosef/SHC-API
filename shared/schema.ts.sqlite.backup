@@ -1,14 +1,11 @@
 import { sql } from "drizzle-orm";
 import { relations } from "drizzle-orm";
 import {
-  pgTable,
-  serial,
+  sqliteTable,
   integer,
   real,
   text,
-  timestamp,
-  boolean,
-} from "drizzle-orm/pg-core";
+} from "drizzle-orm/sqlite-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -27,19 +24,19 @@ export const supportTicketStatusEnum = ["open", "in_progress", "closed"] as cons
 export const supportTicketPriorityEnum = ["low", "medium", "high"] as const;
 
 // Users table
-export const users = pgTable("users", {
+export const users = sqliteTable("users", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   name: text("name").notNull(),
   email: text("email").notNull().unique(),
   passwordHash: text("password_hash").notNull(),
   role: text("role", { enum: userRoleEnum }).notNull().default("buyer"),
   phone: text("phone"),
-  createdAt: timestamp("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
-  updatedAt: timestamp("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
-  lastLoginAt: timestamp("last_login_at"),
-  isActive: boolean("is_active").notNull().default(true),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().default(sql`CURRENT_TIMESTAMP`),
+  lastLoginAt: integer("last_login_at", { mode: "timestamp" }),
+  isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
   resetToken: text("reset_token"),
-  resetTokenExpiry: timestamp("reset_token_expiry"),
+  resetTokenExpiry: integer("reset_token_expiry", { mode: "timestamp" }),
 });
 
 export const usersRelations = relations(users, ({ many }) => ({
@@ -52,7 +49,7 @@ export const usersRelations = relations(users, ({ many }) => ({
 }));
 
 // Companies table
-export const companies = pgTable("companies", {
+export const companies = sqliteTable("companies", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   name: text("name").notNull(),
   legalName: text("legal_name").notNull(),
@@ -63,8 +60,8 @@ export const companies = pgTable("companies", {
   billingEmail: text("billing_email"),
   status: text("status", { enum: companyStatusEnum }).notNull().default("pending_review"),
   creditLimit: real("credit_limit").default(0),
-  createdAt: timestamp("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
-  updatedAt: timestamp("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 
 export const companiesRelations = relations(companies, ({ many }) => ({
@@ -79,12 +76,12 @@ export const companiesRelations = relations(companies, ({ many }) => ({
 }));
 
 // Company Users (join table)
-export const companyUsers = pgTable("company_users", {
+export const companyUsers = sqliteTable("company_users", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   companyId: text("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
   userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   roleInCompany: text("role_in_company", { enum: companyUserRoleEnum }).notNull().default("buyer"),
-  createdAt: timestamp("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 
 export const companyUsersRelations = relations(companyUsers, ({ one }) => ({
@@ -99,12 +96,12 @@ export const companyUsersRelations = relations(companyUsers, ({ one }) => ({
 }));
 
 // Device Categories
-export const deviceCategories = pgTable("device_categories", {
+export const deviceCategories = sqliteTable("device_categories", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   name: text("name").notNull(),
   slug: text("slug").notNull().unique(),
-  createdAt: timestamp("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
-  updatedAt: timestamp("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 
 export const deviceCategoriesRelations = relations(deviceCategories, ({ many }) => ({
@@ -112,7 +109,7 @@ export const deviceCategoriesRelations = relations(deviceCategories, ({ many }) 
 }));
 
 // Device Models
-export const deviceModels = pgTable("device_models", {
+export const deviceModels = sqliteTable("device_models", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   brand: text("brand").notNull(),
   name: text("name").notNull(),
@@ -122,9 +119,9 @@ export const deviceModels = pgTable("device_models", {
   categoryId: text("category_id").notNull().references(() => deviceCategories.id),
   imageUrl: text("image_url"),
   description: text("description"),
-  createdAt: timestamp("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
-  updatedAt: timestamp("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
-  isActive: boolean("is_active").notNull().default(true),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().default(sql`CURRENT_TIMESTAMP`),
+  isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
 });
 
 export const deviceModelsRelations = relations(deviceModels, ({ one, many }) => ({
@@ -136,7 +133,7 @@ export const deviceModelsRelations = relations(deviceModels, ({ one, many }) => 
 }));
 
 // Device Variants
-export const deviceVariants = pgTable("device_variants", {
+export const deviceVariants = sqliteTable("device_variants", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   deviceModelId: text("device_model_id").notNull().references(() => deviceModels.id, { onDelete: "cascade" }),
   storage: text("storage").notNull(),
@@ -144,9 +141,9 @@ export const deviceVariants = pgTable("device_variants", {
   networkLockStatus: text("network_lock_status", { enum: networkLockStatusEnum }).notNull().default("unlocked"),
   conditionGrade: text("condition_grade", { enum: conditionGradeEnum }).notNull(),
   internalCode: text("internal_code"),
-  isActive: boolean("is_active").notNull().default(true),
-  createdAt: timestamp("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
-  updatedAt: timestamp("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 
 export const deviceVariantsRelations = relations(deviceVariants, ({ one, many }) => ({
@@ -163,15 +160,15 @@ export const deviceVariantsRelations = relations(deviceVariants, ({ one, many })
 }));
 
 // Inventory Items
-export const inventoryItems = pgTable("inventory_items", {
+export const inventoryItems = sqliteTable("inventory_items", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   deviceVariantId: text("device_variant_id").notNull().references(() => deviceVariants.id, { onDelete: "cascade" }),
   quantityAvailable: integer("quantity_available").notNull().default(0),
   minOrderQuantity: integer("min_order_quantity").notNull().default(1),
   location: text("location"),
   status: text("status", { enum: inventoryStatusEnum }).notNull().default("in_stock"),
-  createdAt: timestamp("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
-  updatedAt: timestamp("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 
 export const inventoryItemsRelations = relations(inventoryItems, ({ one }) => ({
@@ -182,16 +179,16 @@ export const inventoryItemsRelations = relations(inventoryItems, ({ one }) => ({
 }));
 
 // Price Tiers
-export const priceTiers = pgTable("price_tiers", {
+export const priceTiers = sqliteTable("price_tiers", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   deviceVariantId: text("device_variant_id").notNull().references(() => deviceVariants.id, { onDelete: "cascade" }),
   minQuantity: integer("min_quantity").notNull(),
   maxQuantity: integer("max_quantity"),
   unitPrice: real("unit_price").notNull(),
   currency: text("currency").notNull().default("USD"),
-  effectiveFrom: timestamp("effective_from").notNull().default(sql`CURRENT_TIMESTAMP`),
-  effectiveTo: timestamp("effective_to"),
-  isActive: boolean("is_active").notNull().default(true),
+  effectiveFrom: integer("effective_from", { mode: "timestamp" }).notNull().default(sql`CURRENT_TIMESTAMP`),
+  effectiveTo: integer("effective_to", { mode: "timestamp" }),
+  isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
 });
 
 export const priceTiersRelations = relations(priceTiers, ({ one }) => ({
@@ -202,12 +199,12 @@ export const priceTiersRelations = relations(priceTiers, ({ one }) => ({
 }));
 
 // Carts
-export const carts = pgTable("carts", {
+export const carts = sqliteTable("carts", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   companyId: text("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
-  createdAt: timestamp("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
-  updatedAt: timestamp("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 
 export const cartsRelations = relations(carts, ({ one, many }) => ({
@@ -223,14 +220,14 @@ export const cartsRelations = relations(carts, ({ one, many }) => ({
 }));
 
 // Cart Items
-export const cartItems = pgTable("cart_items", {
+export const cartItems = sqliteTable("cart_items", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   cartId: text("cart_id").notNull().references(() => carts.id, { onDelete: "cascade" }),
   deviceVariantId: text("device_variant_id").notNull().references(() => deviceVariants.id, { onDelete: "cascade" }),
   quantity: integer("quantity").notNull(),
   unitPriceSnapshot: real("unit_price_snapshot").notNull(),
-  createdAt: timestamp("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
-  updatedAt: timestamp("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 
 export const cartItemsRelations = relations(cartItems, ({ one }) => ({
@@ -245,7 +242,7 @@ export const cartItemsRelations = relations(cartItems, ({ one }) => ({
 }));
 
 // Orders
-export const orders = pgTable("orders", {
+export const orders = sqliteTable("orders", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   orderNumber: text("order_number").notNull().unique(),
   companyId: text("company_id").notNull().references(() => companies.id),
@@ -263,8 +260,8 @@ export const orders = pgTable("orders", {
   billingAddressId: text("billing_address_id").references(() => billingAddresses.id),
   notesInternal: text("notes_internal"),
   notesCustomer: text("notes_customer"),
-  createdAt: timestamp("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
-  updatedAt: timestamp("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 
 export const ordersRelations = relations(orders, ({ one, many }) => ({
@@ -283,14 +280,14 @@ export const ordersRelations = relations(orders, ({ one, many }) => ({
 }));
 
 // Order Items
-export const orderItems = pgTable("order_items", {
+export const orderItems = sqliteTable("order_items", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   orderId: text("order_id").notNull().references(() => orders.id, { onDelete: "cascade" }),
   deviceVariantId: text("device_variant_id").notNull().references(() => deviceVariants.id),
   quantity: integer("quantity").notNull(),
   unitPrice: real("unit_price").notNull(),
   lineTotal: real("line_total").notNull(),
-  createdAt: timestamp("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 
 export const orderItemsRelations = relations(orderItems, ({ one }) => ({
@@ -305,7 +302,7 @@ export const orderItemsRelations = relations(orderItems, ({ one }) => ({
 }));
 
 // Shipping Addresses
-export const shippingAddresses = pgTable("shipping_addresses", {
+export const shippingAddresses = sqliteTable("shipping_addresses", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   companyId: text("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
   label: text("label"),
@@ -317,9 +314,9 @@ export const shippingAddresses = pgTable("shipping_addresses", {
   state: text("state").notNull(),
   postalCode: text("postal_code").notNull(),
   country: text("country").notNull().default("USA"),
-  isDefault: boolean("is_default").notNull().default(false),
-  createdAt: timestamp("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
-  updatedAt: timestamp("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  isDefault: integer("is_default", { mode: "boolean" }).notNull().default(false),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 
 export const shippingAddressesRelations = relations(shippingAddresses, ({ one }) => ({
@@ -330,7 +327,7 @@ export const shippingAddressesRelations = relations(shippingAddresses, ({ one })
 }));
 
 // Billing Addresses
-export const billingAddresses = pgTable("billing_addresses", {
+export const billingAddresses = sqliteTable("billing_addresses", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   companyId: text("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
   label: text("label"),
@@ -342,9 +339,9 @@ export const billingAddresses = pgTable("billing_addresses", {
   state: text("state").notNull(),
   postalCode: text("postal_code").notNull(),
   country: text("country").notNull().default("USA"),
-  isDefault: boolean("is_default").notNull().default(false),
-  createdAt: timestamp("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
-  updatedAt: timestamp("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  isDefault: integer("is_default", { mode: "boolean" }).notNull().default(false),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 
 export const billingAddressesRelations = relations(billingAddresses, ({ one }) => ({
@@ -355,20 +352,20 @@ export const billingAddressesRelations = relations(billingAddresses, ({ one }) =
 }));
 
 // Quotes
-export const quotes = pgTable("quotes", {
+export const quotes = sqliteTable("quotes", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   quoteNumber: text("quote_number").notNull().unique(),
   companyId: text("company_id").notNull().references(() => companies.id),
   createdByUserId: text("created_by_user_id").notNull().references(() => users.id),
   status: text("status", { enum: quoteStatusEnum }).notNull().default("draft"),
-  validUntil: timestamp("valid_until"),
+  validUntil: integer("valid_until", { mode: "timestamp" }),
   subtotal: real("subtotal").notNull().default(0),
   shippingEstimate: real("shipping_estimate").notNull().default(0),
   taxEstimate: real("tax_estimate").notNull().default(0),
   totalEstimate: real("total_estimate").notNull().default(0),
   currency: text("currency").notNull().default("USD"),
-  createdAt: timestamp("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
-  updatedAt: timestamp("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 
 export const quotesRelations = relations(quotes, ({ one, many }) => ({
@@ -385,14 +382,14 @@ export const quotesRelations = relations(quotes, ({ one, many }) => ({
 }));
 
 // Quote Items
-export const quoteItems = pgTable("quote_items", {
+export const quoteItems = sqliteTable("quote_items", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   quoteId: text("quote_id").notNull().references(() => quotes.id, { onDelete: "cascade" }),
   deviceVariantId: text("device_variant_id").notNull().references(() => deviceVariants.id),
   quantity: integer("quantity").notNull(),
   proposedUnitPrice: real("proposed_unit_price").notNull(),
   lineTotalEstimate: real("line_total_estimate").notNull(),
-  createdAt: timestamp("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 
 export const quoteItemsRelations = relations(quoteItems, ({ one }) => ({
@@ -407,13 +404,13 @@ export const quoteItemsRelations = relations(quoteItems, ({ one }) => ({
 }));
 
 // Saved Lists
-export const savedLists = pgTable("saved_lists", {
+export const savedLists = sqliteTable("saved_lists", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   companyId: text("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
   createdByUserId: text("created_by_user_id").notNull().references(() => users.id),
-  createdAt: timestamp("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
-  updatedAt: timestamp("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 
 export const savedListsRelations = relations(savedLists, ({ one, many }) => ({
@@ -429,7 +426,7 @@ export const savedListsRelations = relations(savedLists, ({ one, many }) => ({
 }));
 
 // Saved List Items
-export const savedListItems = pgTable("saved_list_items", {
+export const savedListItems = sqliteTable("saved_list_items", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   savedListId: text("saved_list_id").notNull().references(() => savedLists.id, { onDelete: "cascade" }),
   deviceVariantId: text("device_variant_id").notNull().references(() => deviceVariants.id, { onDelete: "cascade" }),
@@ -448,7 +445,7 @@ export const savedListItemsRelations = relations(savedListItems, ({ one }) => ({
 }));
 
 // Payments
-export const payments = pgTable("payments", {
+export const payments = sqliteTable("payments", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   orderId: text("order_id").notNull().references(() => orders.id, { onDelete: "cascade" }),
   stripePaymentIntentId: text("stripe_payment_intent_id"),
@@ -456,7 +453,7 @@ export const payments = pgTable("payments", {
   currency: text("currency").notNull().default("USD"),
   status: text("status").notNull(),
   method: text("method", { enum: paymentMethodEnum }).notNull(),
-  processedAt: timestamp("processed_at"),
+  processedAt: integer("processed_at", { mode: "timestamp" }),
 });
 
 export const paymentsRelations = relations(payments, ({ one }) => ({
@@ -467,15 +464,15 @@ export const paymentsRelations = relations(payments, ({ one }) => ({
 }));
 
 // Shipments
-export const shipments = pgTable("shipments", {
+export const shipments = sqliteTable("shipments", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   orderId: text("order_id").notNull().references(() => orders.id, { onDelete: "cascade" }),
   carrier: text("carrier").notNull(),
   serviceLevel: text("service_level"),
   trackingNumber: text("tracking_number"),
   shippingLabelUrl: text("shipping_label_url"),
-  shippedAt: timestamp("shipped_at"),
-  estimatedDeliveryDate: timestamp("estimated_delivery_date"),
+  shippedAt: integer("shipped_at", { mode: "timestamp" }),
+  estimatedDeliveryDate: integer("estimated_delivery_date", { mode: "timestamp" }),
 });
 
 export const shipmentsRelations = relations(shipments, ({ one }) => ({
@@ -486,30 +483,30 @@ export const shipmentsRelations = relations(shipments, ({ one }) => ({
 }));
 
 // FAQs
-export const faqs = pgTable("faqs", {
+export const faqs = sqliteTable("faqs", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   question: text("question").notNull(),
   answer: text("answer").notNull(),
   category: text("category").notNull(),
   displayOrder: integer("display_order").notNull().default(0),
-  isActive: boolean("is_active").notNull().default(true),
-  createdAt: timestamp("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
-  updatedAt: timestamp("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 
 // Announcements
-export const announcements = pgTable("announcements", {
+export const announcements = sqliteTable("announcements", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   title: text("title").notNull(),
   body: text("body").notNull(),
-  startsAt: timestamp("starts_at"),
-  endsAt: timestamp("ends_at"),
-  isActive: boolean("is_active").notNull().default(true),
-  createdAt: timestamp("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  startsAt: integer("starts_at", { mode: "timestamp" }),
+  endsAt: integer("ends_at", { mode: "timestamp" }),
+  isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 
 // Support Tickets
-export const supportTickets = pgTable("support_tickets", {
+export const supportTickets = sqliteTable("support_tickets", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   companyId: text("company_id").references(() => companies.id, { onDelete: "cascade" }),
   createdByUserId: text("created_by_user_id").references(() => users.id),
@@ -517,8 +514,8 @@ export const supportTickets = pgTable("support_tickets", {
   description: text("description").notNull(),
   status: text("status", { enum: supportTicketStatusEnum }).notNull().default("open"),
   priority: text("priority", { enum: supportTicketPriorityEnum }).notNull().default("medium"),
-  createdAt: timestamp("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
-  updatedAt: timestamp("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 
 export const supportTicketsRelations = relations(supportTickets, ({ one }) => ({
@@ -533,7 +530,7 @@ export const supportTicketsRelations = relations(supportTickets, ({ one }) => ({
 }));
 
 // Audit Logs
-export const auditLogs = pgTable("audit_logs", {
+export const auditLogs = sqliteTable("audit_logs", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   actorUserId: text("actor_user_id").references(() => users.id),
   companyId: text("company_id").references(() => companies.id),
@@ -542,7 +539,7 @@ export const auditLogs = pgTable("audit_logs", {
   entityId: text("entity_id").notNull(),
   previousValues: text("previous_values"),
   newValues: text("new_values"),
-  createdAt: timestamp("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 
 export const auditLogsRelations = relations(auditLogs, ({ one }) => ({

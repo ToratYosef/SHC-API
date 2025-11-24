@@ -14,7 +14,7 @@ import {
   insertSavedListSchema,
   insertSavedListItemSchema,
 } from "@shared/schema";
-import { db, sqlite } from "./db";
+import { db } from "./db";
 import * as schema from "@shared/schema";
 
 // Import route modules from functions folder

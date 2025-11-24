@@ -1,5 +1,12 @@
+import "dotenv/config";
 import { storage } from "./storage";
 import bcrypt from "bcrypt";
+
+// Load environment from server/.env if not already set
+if (!process.env.DATABASE_URL) {
+  const { config } = await import('dotenv');
+  config({ path: './server/.env' });
+}
 
 async function seed() {
   console.log("Starting database seed...");
