@@ -5,3 +5,4 @@ server/.env
 *.db-shm
 *.db-wal
 dist/
+/workspaces/SHC-API/server/.env
