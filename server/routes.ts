@@ -653,6 +653,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   app.get("/api/catalog/categories", getCategoriesHandler);
   app.get("/api/categories", getCategoriesHandler);
+  app.get("/api/device-categories", getCategoriesHandler); // Alias for frontend compatibility
 
   // Get brands (unique brands from device models)
   app.get("/api/brands", async (req, res) => {
@@ -672,7 +673,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get models by brand
-  app.get("/api/models", async (req, res) => {
+  const getModelsHandler = async (req: Request, res: Response) => {
     try {
       const { brandId } = req.query;
       const models = await storage.getAllDeviceModels();
@@ -699,7 +700,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error("Get models error:", error);
       res.status(500).json({ error: "Failed to get models" });
     }
-  });
+  };
+
+  app.get("/api/models", getModelsHandler);
+  app.get("/api/device-models", getModelsHandler); // Alias for frontend compatibility
 
   // Get device conditions
   app.get("/api/conditions", async (req, res) => {
