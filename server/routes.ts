@@ -90,15 +90,38 @@ const selectPriceTierForQuantity = (tiers: any[], quantity: number) => {
 
 // Middleware to check if user is admin or super_admin
 const requireAdmin = async (req: Request, res: Response, next: NextFunction) => {
+  console.log('[requireAdmin] Session check:', {
+    hasSession: !!req.session,
+    userId: req.session?.userId,
+    userRole: req.session?.userRole,
+    sessionID: req.session?.id,
+    cookies: req.headers.cookie
+  });
+  
   if (!req.session.userId) {
-    return res.status(401).json({ error: "Authentication required" });
+    console.log('[requireAdmin] No userId in session - returning 401');
+    return res.status(401).json({ 
+      error: "Authentication required",
+      details: "No active session found. Please log in again."
+    });
   }
   
   const user = await storage.getUser(req.session.userId);
+  console.log('[requireAdmin] User lookup result:', {
+    found: !!user,
+    role: user?.role,
+    userId: user?.id
+  });
+  
   if (!user || (user.role !== "admin" && user.role !== "super_admin")) {
-    return res.status(403).json({ error: "Admin access required" });
+    console.log('[requireAdmin] User not admin - returning 403');
+    return res.status(403).json({ 
+      error: "Admin access required",
+      details: user ? `User role '${user.role}' is not authorized` : "User not found"
+    });
   }
   
+  console.log('[requireAdmin] Admin check passed for user:', user.email);
   next();
 };
 
@@ -109,6 +132,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   const MemoryStore = createMemoryStore(session);
 
+  console.log('[Session Config]', {
+    isProduction,
+    cookieSecure: isProduction,
+    cookieSameSite: isProduction ? "none" : "lax",
+  });
+
   app.use(session({
     store: new MemoryStore({
       checkPeriod: 24 * 60 * 60 * 1000,
@@ -116,13 +145,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
     secret: sessionSecret,
     resave: false,
     saveUninitialized: false,
+    name: 'shc.sid', // Custom session cookie name
     cookie: {
       secure: isProduction,
       httpOnly: true,
       sameSite: isProduction ? "none" : "lax",
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+      // Don't set domain - let it default to the current domain
     },
   }));
+
+  // Debug middleware to log session info
+  app.use((req, res, next) => {
+    if (req.path.startsWith('/api/admin')) {
+      console.log('[Session Debug]', {
+        path: req.path,
+        method: req.method,
+        sessionID: req.session?.id,
+        userId: req.session?.userId,
+        userRole: req.session?.userRole,
+        hasCookie: !!req.headers.cookie,
+        isProduction
+      });
+    }
+    next();
+  });
 
   // ==================== REGISTER MIGRATED ROUTES FROM FUNCTIONS FOLDER ====================
   
@@ -304,18 +351,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/auth/login", async (req, res) => {
     try {
       const { email, password } = req.body;
+      console.log('[Login] Attempt for email:', email);
 
       const user = await storage.getUserByEmail(email);
       if (!user) {
+        console.log('[Login] User not found:', email);
         return res.status(401).json({ error: "Invalid credentials" });
       }
 
       const validPassword = await bcrypt.compare(password, user.passwordHash);
       if (!validPassword) {
+        console.log('[Login] Invalid password for user:', email);
         return res.status(401).json({ error: "Invalid credentials" });
       }
 
       if (!user.isActive) {
+        console.log('[Login] User account inactive:', email);
         return res.status(403).json({ error: "Account is inactive" });
       }
 
@@ -325,6 +376,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Set session
       req.session.userId = user.id;
       req.session.userRole = user.role;
+      
+      console.log('[Login] Success:', {
+        userId: user.id,
+        email: user.email,
+        role: user.role,
+        sessionID: req.session.id,
+        cookie: req.session.cookie
+      });
       
       res.json({ 
         success: true, 
@@ -439,14 +498,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get current user (without requireAuth to check session)
   const getMeHandler = async (req: any, res: any) => {
     try {
+      console.log('[/api/auth/me] Session check:', {
+        hasSession: !!req.session,
+        sessionID: req.session?.id,
+        userId: req.session?.userId,
+        userRole: req.session?.userRole,
+        hasCookie: !!req.headers.cookie
+      });
+      
       if (!req.session.userId) {
-        return res.status(401).json({ user: null });
+        console.log('[/api/auth/me] No userId in session');
+        return res.status(401).json({ user: null, message: "Not authenticated" });
       }
 
       const user = await storage.getUser(req.session.userId!);
       if (!user) {
+        console.log('[/api/auth/me] User not found for userId:', req.session.userId);
         return res.status(404).json({ error: "User not found" });
       }
+
+      console.log('[/api/auth/me] User found:', { id: user.id, email: user.email, role: user.role });
 
       // Get user's company
       const companyUsers = await storage.getCompanyUsersByUserId(user.id);
