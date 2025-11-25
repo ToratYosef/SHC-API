@@ -41,6 +41,7 @@ export interface IStorage {
   createCompany(company: InsertCompany): Promise<Company>;
   updateCompany(id: string, updates: Partial<Company>): Promise<Company | undefined>;
   getAllCompanies(): Promise<Company[]>;
+  getCompanyByName(name: string): Promise<Company | undefined>;
   
   // CompanyUser methods
   createCompanyUser(companyUser: InsertCompanyUser): Promise<CompanyUser>;
@@ -189,6 +190,11 @@ export class DatabaseStorage implements IStorage {
 
   async getAllCompanies(): Promise<Company[]> {
     return await db.select().from(schema.companies).orderBy(desc(schema.companies.createdAt));
+  }
+
+  async getCompanyByName(name: string): Promise<Company | undefined> {
+    const [company] = await db.select().from(schema.companies).where(eq(schema.companies.name, name));
+    return company || undefined;
   }
 
   // CompanyUser methods

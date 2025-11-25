@@ -151,13 +151,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       httpOnly: true,
       sameSite: isProduction ? "none" : "lax",
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-      // Don't set domain - let it default to the current domain
+      path: '/',
+      domain: isProduction ? '.secondhandcell.com' : undefined, // Allow subdomain sharing
     },
   }));
 
   // Debug middleware to log session info
   app.use((req, res, next) => {
-    if (req.path.startsWith('/api/admin')) {
+    if (req.path.startsWith('/api/admin') || req.path === '/api/auth/me') {
       console.log('[Session Debug]', {
         path: req.path,
         method: req.method,
@@ -165,6 +166,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         userId: req.session?.userId,
         userRole: req.session?.userRole,
         hasCookie: !!req.headers.cookie,
+        cookieHeader: req.headers.cookie,
+        origin: req.headers.origin,
         isProduction
       });
     }
@@ -1099,22 +1102,112 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // ==================== ORDER ROUTES ====================
   
-  // Create order from cart (public endpoint - no auth required for sell page)
+  // Create order (public endpoint - supports both authenticated cart checkout and guest orders)
   app.post("/api/orders", async (req, res) => {
     try {
-      const { paymentMethod, shippingAddressId, billingAddressId, notes } = req.body;
-
-      // Check if user is authenticated
-      const userId = req.session.userId;
+      console.log('[POST /api/orders] Request body:', JSON.stringify(req.body, null, 2));
+      console.log('[POST /api/orders] Session userId:', req.session?.userId);
       
-      // If no userId in session, allow guest checkout
+      const userId = req.session?.userId;
+      
+      // Guest order flow (sell page - selling devices TO the company)
       if (!userId) {
-        // For guest orders (sell page), we need different logic
-        // This should be handled by /api/submit-order endpoint
-        return res.status(400).json({ 
-          error: "Please use /api/submit-order endpoint for guest orders" 
+        const { 
+          customerInfo, 
+          devices, 
+          shippingAddress,
+          paymentMethod,
+          notes
+        } = req.body;
+        
+        console.log('[POST /api/orders] Guest order detected');
+        
+        // Validate guest order data
+        if (!customerInfo || !customerInfo.email) {
+          return res.status(400).json({ error: "Customer email is required" });
+        }
+        
+        if (!devices || !Array.isArray(devices) || devices.length === 0) {
+          return res.status(400).json({ error: "At least one device is required" });
+        }
+        
+        // Generate order number for guest (sell) orders
+        const orderNumber = `SL-${Date.now()}-${Math.random().toString(36).substring(7).toUpperCase()}`;
+        
+        // Calculate total
+        let total = 0;
+        devices.forEach((device: any) => {
+          total += parseFloat(device.price || device.amount || 0) * (device.quantity || 1);
         });
+        
+        // Create a guest user or find existing by email
+        let guestUser = await storage.getUserByEmail(customerInfo.email);
+        if (!guestUser) {
+          // Create guest user
+          const randomPassword = Math.random().toString(36).slice(-8);
+          const passwordHash = await bcrypt.hash(randomPassword, 10);
+          
+          guestUser = await storage.createUser({
+            email: customerInfo.email,
+            name: customerInfo.name || customerInfo.email.split('@')[0],
+            passwordHash,
+            role: 'customer',
+            isActive: true,
+          });
+          
+          console.log('[POST /api/orders] Created guest user:', guestUser.id);
+        }
+        
+        // Get or create default company for guest orders
+        let guestCompany = await storage.getCompanyByName('Guest Orders');
+        if (!guestCompany) {
+          guestCompany = await storage.createCompany({
+            name: 'Guest Orders',
+            slug: 'guest-orders',
+            type: 'supplier',
+            isActive: true,
+          });
+        }
+        
+        // Store customer info in notes
+        const customerNotes = `Customer: ${customerInfo.name || 'N/A'}
+Email: ${customerInfo.email}
+Phone: ${customerInfo.phone || 'N/A'}
+${shippingAddress ? `Address: ${JSON.stringify(shippingAddress)}` : ''}
+${notes ? `\nNotes: ${notes}` : ''}`;
+        
+        // Create order
+        const order = await storage.createOrder({
+          orderNumber,
+          companyId: guestCompany.id,
+          createdByUserId: guestUser.id,
+          status: 'pending_payment',
+          subtotal: total.toFixed(2),
+          shippingCost: '0',
+          taxAmount: '0',
+          discountAmount: '0',
+          total: total.toFixed(2),
+          currency: 'USD',
+          paymentStatus: 'pending',
+          paymentMethod: paymentMethod || 'check',
+          shippingAddressId: null,
+          billingAddressId: null,
+          notesCustomer: customerNotes,
+        });
+        
+        console.log('[POST /api/orders] Guest order created:', order.id, orderNumber);
+        
+        res.json({ 
+          success: true,
+          orderId: order.id,
+          orderNumber: order.orderNumber,
+          message: 'Order submitted successfully'
+        });
+        return;
       }
+      
+      // Authenticated user flow (cart checkout - buying devices FROM the company)
+      const { paymentMethod, shippingAddressId, billingAddressId, notes } = req.body;
 
       // Validate required fields
       if (!shippingAddressId) {
