@@ -7,25 +7,25 @@ async function createAdmin() {
 
   try {
     // Check if admin already exists
-    const existing = await storage.getUserByEmail("admin@secondhandcell.com");
+    const existing = await storage.getUserByEmail("admin1@secondhandcell.com");
     if (existing) {
       console.log("Admin user already exists. Updating...");
-      const adminPassword = await bcrypt.hash("Admin123!", 10);
+      const adminPassword = await bcrypt.hash("Admin1234!", 10);
       await storage.updateUser(existing.id, {
         passwordHash: adminPassword,
         role: "super_admin",
         isActive: true,
       });
       console.log("Admin user updated successfully!");
-      console.log("Email: admin@secondhandcell.com");
-      console.log("Password: Admin123!");
+      console.log("Email: admin1@secondhandcell.com");
+      console.log("Password: Admin1234!");
       return;
     }
 
-    const adminPassword = await bcrypt.hash("Admin123!", 10);
+    const adminPassword = await bcrypt.hash("Admin1234!", 10);
     const adminUser = await storage.createUser({
       name: "Admin User",
-      email: "admin@secondhandcell.com",
+      email: "admin1@secondhandcell.com",
       passwordHash: adminPassword,
       role: "super_admin",
       phone: "+1-555-0100",

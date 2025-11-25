@@ -1197,10 +1197,21 @@ ${notes ? `\nNotes: ${notes}` : ''}`;
         
         console.log('[POST /api/orders] Guest order created:', order.id, orderNumber);
         
+        // Return full order details for frontend
         res.json({ 
           success: true,
+          order: {
+            id: order.id,
+            orderNumber: order.orderNumber,
+            status: order.status,
+            total: order.total,
+            currency: order.currency,
+            createdAt: order.createdAt,
+          },
           orderId: order.id,
           orderNumber: order.orderNumber,
+          shipment: null, // No shipment created yet for guest orders
+          labelUrl: null, // No label yet
           message: 'Order submitted successfully'
         });
         return;
@@ -1302,7 +1313,36 @@ ${notes ? `\nNotes: ${notes}` : ''}`;
     }
   });
 
-  // Get order by number
+  // Get order by number (public - for order tracking)
+  app.get("/api/orders/by-number/:orderNumber", async (req, res) => {
+    try {
+      console.log('[GET /api/orders/by-number] Order number:', req.params.orderNumber);
+      
+      const order = await storage.getOrderByNumber(req.params.orderNumber);
+      if (!order) {
+        console.log('[GET /api/orders/by-number] Order not found');
+        return res.status(404).json({ error: "Order not found" });
+      }
+
+      const items = await storage.getOrderItems(order.id);
+      const payments = await storage.getPaymentsByOrderId(order.id);
+      const shipments = await storage.getShipmentsByOrderId(order.id);
+
+      console.log('[GET /api/orders/by-number] Order found:', {
+        id: order.id,
+        orderNumber: order.orderNumber,
+        itemsCount: items.length,
+        shipmentsCount: shipments.length
+      });
+
+      res.json({ ...order, items, payments, shipments });
+    } catch (error: any) {
+      console.error("Get order by number error:", error);
+      res.status(500).json({ error: "Failed to get order" });
+    }
+  });
+
+  // Get order by number (authenticated - for user's own orders)
   app.get("/api/orders/:orderNumber", requireAuth, async (req, res) => {
     try {
       const order = await storage.getOrderByNumber(req.params.orderNumber);
