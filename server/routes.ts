@@ -1742,6 +1742,66 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Dashboard stats (admin only)
+  app.get("/api/admin/dashboard-stats", requireAdmin, async (req, res) => {
+    try {
+      const orders = await storage.getAllOrders();
+      const companies = await storage.getAllCompanies();
+      const users = await storage.getAllUsers();
+      
+      const totalRevenue = orders.reduce((sum, order) => sum + (order.total || 0), 0);
+      const pendingOrders = orders.filter(o => o.status === 'pending_payment' || o.status === 'payment_review').length;
+      const completedOrders = orders.filter(o => o.status === 'completed').length;
+      
+      res.json({
+        totalRevenue,
+        totalOrders: orders.length,
+        pendingOrders,
+        completedOrders,
+        totalCompanies: companies.length,
+        activeCompanies: companies.filter(c => c.status === 'approved').length,
+        totalUsers: users.length,
+        activeUsers: users.filter(u => u.isActive).length,
+      });
+    } catch (error: any) {
+      console.error("Dashboard stats error:", error);
+      res.status(500).json({ error: "Failed to get dashboard stats" });
+    }
+  });
+
+  // Quick stats (admin only)
+  app.get("/api/admin/quick-stats", requireAdmin, async (req, res) => {
+    try {
+      const orders = await storage.getAllOrders();
+      const companies = await storage.getAllCompanies();
+      
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      const todayOrders = orders.filter(o => {
+        const orderDate = new Date(o.createdAt);
+        return orderDate >= today;
+      });
+      
+      const thisMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+      const monthOrders = orders.filter(o => {
+        const orderDate = new Date(o.createdAt);
+        return orderDate >= thisMonth;
+      });
+      
+      res.json({
+        ordersToday: todayOrders.length,
+        ordersThisMonth: monthOrders.length,
+        revenueToday: todayOrders.reduce((sum, o) => sum + (o.total || 0), 0),
+        revenueThisMonth: monthOrders.reduce((sum, o) => sum + (o.total || 0), 0),
+        pendingApprovals: companies.filter(c => c.status === 'pending_review').length,
+      });
+    } catch (error: any) {
+      console.error("Quick stats error:", error);
+      res.status(500).json({ error: "Failed to get quick stats" });
+    }
+  });
+
   // Get all orders (admin only)
   app.get("/api/admin/orders", requireAdmin, async (req, res) => {
     try {
