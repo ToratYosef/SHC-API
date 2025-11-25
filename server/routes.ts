@@ -146,6 +146,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // ==================== PUBLIC API ROUTES (No Auth Required) ====================
   
+  // Site settings (public)
+  app.get("/api/settings", async (req, res) => {
+    try {
+      const payload = {
+        logoUrl: process.env.SITE_LOGO_URL || null,
+        siteName: "SecondHandCell",
+      };
+      res.json(payload);
+    } catch (error: any) {
+      console.error("Get settings error:", error);
+      res.status(500).json({ error: "Failed to get settings" });
+    }
+  });
+
   // Get public categories
   app.get("/api/public/categories", async (req, res) => {
     try {
@@ -653,14 +667,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   app.get("/api/catalog/categories", getCategoriesHandler);
   app.get("/api/categories", getCategoriesHandler);
-  app.get("/api/device-categories", getCategoriesHandler); // Alias for frontend compatibility
 
   // Get brands (unique brands from device models)
   app.get("/api/brands", async (req, res) => {
     try {
       const models = await storage.getAllDeviceModels();
       const brandsSet = new Set(models.map(m => m.brand));
-      const brands = Array.from(brandsSet).map((brand, index) => ({
+      // Sort alphabetically for consistent indexing
+      const brandsArray = Array.from(brandsSet).sort();
+      const brands = brandsArray.map((brand, index) => ({
         id: `brand-${index}`,
         name: brand,
         slug: brand.toLowerCase().replace(/\s+/g, '-'),
@@ -672,20 +687,88 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get models by brand
-  const getModelsHandler = async (req: Request, res: Response) => {
+  // Get models by brand (RESTful route: /api/brands/:brandSlug/models)
+  app.get("/api/brands/:brandSlug/models", async (req, res) => {
+    try {
+      const { brandSlug } = req.params;
+      const models = await storage.getAllDeviceModels();
+      
+      // Convert slug to brand name (e.g., "apple" -> "Apple", "samsung" -> "Samsung")
+      const brandName = brandSlug.split('-').map(word => 
+        word.charAt(0).toUpperCase() + word.slice(1)
+      ).join(' ');
+      
+      const filteredModels = models.filter(m => 
+        m.brand.toLowerCase() === brandSlug.toLowerCase()
+      );
+      
+      const result = filteredModels.map(m => ({
+        id: m.id,
+        brandId: `brand-${m.brand.toLowerCase().replace(/\s+/g, '-')}`,
+        name: m.marketingName || m.name,
+        slug: m.slug,
+        year: null,
+      }));
+      
+      res.json(result);
+    } catch (error: any) {
+      console.error("Get models by brand slug error:", error);
+      res.status(500).json({ error: "Failed to get models" });
+    }
+  });
+
+  // Get models by brand (query param route: /api/models?brandId=brand-0)
+  app.get("/api/models", async (req, res) => {
     try {
       const { brandId } = req.query;
       const models = await storage.getAllDeviceModels();
       
-      // If brandId is provided, extract the brand name from it
-      let filteredModels = models;
-      if (brandId && typeof brandId === 'string') {
-        const brandName = brandId.replace('brand-', '').split('-').map(word => 
-          word.charAt(0).toUpperCase() + word.slice(1)
-        ).join(' ');
-        filteredModels = models.filter(m => m.brand === brandName);
+      console.log('[/api/models] Total models:', models.length);
+      console.log('[/api/models] brandId param:', brandId);
+      
+      // If no brandId, return all models
+      if (!brandId || typeof brandId !== 'string') {
+        const result = models.map(m => ({
+          id: m.id,
+          brandId: `brand-${m.brand.toLowerCase().replace(/\s+/g, '-')}`,
+          name: m.marketingName || m.name,
+          slug: m.slug,
+          year: null,
+        }));
+        return res.json(result);
       }
+      
+      // Extract brand name from brandId
+      let brandName = '';
+      if (brandId.startsWith('brand-')) {
+        const brandPart = brandId.replace('brand-', '');
+        // Check if it's a number (brand-0) or slug (brand-apple)
+        if (/^\d+$/.test(brandPart)) {
+          // Get brand by index - sort brands alphabetically for consistency
+          const brandsSet = new Set(models.map(m => m.brand));
+          const brandsArray = Array.from(brandsSet).sort();
+          const index = parseInt(brandPart, 10);
+          brandName = brandsArray[index] || '';
+          console.log('[/api/models] Brands array:', brandsArray);
+          console.log('[/api/models] Selected brand by index', index, ':', brandName);
+        } else {
+          // Convert slug to proper name (apple -> Apple, samsung -> Samsung)
+          brandName = brandPart.charAt(0).toUpperCase() + brandPart.slice(1);
+          console.log('[/api/models] Selected brand by slug:', brandName);
+        }
+      }
+      
+      if (!brandName) {
+        console.log('[/api/models] No brand name found, returning empty');
+        return res.json([]);
+      }
+      
+      // Filter models by brand (case-insensitive)
+      const filteredModels = models.filter(m => 
+        m.brand.toLowerCase() === brandName.toLowerCase()
+      );
+      
+      console.log('[/api/models] Filtered models count:', filteredModels.length);
       
       const result = filteredModels.map(m => ({
         id: m.id,
@@ -700,10 +783,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error("Get models error:", error);
       res.status(500).json({ error: "Failed to get models" });
     }
-  };
-
-  app.get("/api/models", getModelsHandler);
-  app.get("/api/device-models", getModelsHandler); // Alias for frontend compatibility
+  });
 
   // Get device conditions
   app.get("/api/conditions", async (req, res) => {
@@ -1739,66 +1819,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       console.error("Get all quotes error:", error);
       res.status(500).json({ error: "Failed to get quotes" });
-    }
-  });
-
-  // Dashboard stats (admin only)
-  app.get("/api/admin/dashboard-stats", requireAdmin, async (req, res) => {
-    try {
-      const orders = await storage.getAllOrders();
-      const companies = await storage.getAllCompanies();
-      const users = await storage.getAllUsers();
-      
-      const totalRevenue = orders.reduce((sum, order) => sum + (order.total || 0), 0);
-      const pendingOrders = orders.filter(o => o.status === 'pending_payment' || o.status === 'payment_review').length;
-      const completedOrders = orders.filter(o => o.status === 'completed').length;
-      
-      res.json({
-        totalRevenue,
-        totalOrders: orders.length,
-        pendingOrders,
-        completedOrders,
-        totalCompanies: companies.length,
-        activeCompanies: companies.filter(c => c.status === 'approved').length,
-        totalUsers: users.length,
-        activeUsers: users.filter(u => u.isActive).length,
-      });
-    } catch (error: any) {
-      console.error("Dashboard stats error:", error);
-      res.status(500).json({ error: "Failed to get dashboard stats" });
-    }
-  });
-
-  // Quick stats (admin only)
-  app.get("/api/admin/quick-stats", requireAdmin, async (req, res) => {
-    try {
-      const orders = await storage.getAllOrders();
-      const companies = await storage.getAllCompanies();
-      
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      
-      const todayOrders = orders.filter(o => {
-        const orderDate = new Date(o.createdAt);
-        return orderDate >= today;
-      });
-      
-      const thisMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-      const monthOrders = orders.filter(o => {
-        const orderDate = new Date(o.createdAt);
-        return orderDate >= thisMonth;
-      });
-      
-      res.json({
-        ordersToday: todayOrders.length,
-        ordersThisMonth: monthOrders.length,
-        revenueToday: todayOrders.reduce((sum, o) => sum + (o.total || 0), 0),
-        revenueThisMonth: monthOrders.reduce((sum, o) => sum + (o.total || 0), 0),
-        pendingApprovals: companies.filter(c => c.status === 'pending_review').length,
-      });
-    } catch (error: any) {
-      console.error("Quick stats error:", error);
-      res.status(500).json({ error: "Failed to get quick stats" });
     }
   });
 
