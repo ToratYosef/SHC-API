@@ -436,15 +436,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get current user
+  // Get current user (without requireAuth to check session)
   const getMeHandler = async (req: any, res: any) => {
     try {
+      if (!req.session.userId) {
+        return res.status(401).json({ user: null });
+      }
+
       const user = await storage.getUser(req.session.userId!);
       if (!user) {
         return res.status(404).json({ error: "User not found" });
       }
 
       // Get user's company
+      const companyUsers = await storage.getCompanyUsersByUserId(user.id);
+      let companyId = null;
+      if (companyUsers.length > 0) {
+        companyId = companyUsers[0].companyId;
+      }
+
+      res.json({
+        user: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          phone: user.phone,
+          companyId,
+        }
+      });
+    } catch (error: any) {
+      console.error("Get user error:", error);
+      res.status(500).json({ error: "Failed to get user" });
+    }
+  };
+  
+  app.get("/api/auth/me", getMeHandler);
+  app.get("/api/me", requireAuth, async (req, res) => {
+    try {
+      const user = await storage.getUser(req.session.userId!);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
       const companyUsers = await storage.getCompanyUsersByUserId(user.id);
       let companyId = null;
       if (companyUsers.length > 0) {
@@ -463,10 +497,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error("Get user error:", error);
       res.status(500).json({ error: "Failed to get user" });
     }
-  };
-  
-  app.get("/api/auth/me", requireAuth, getMeHandler);
-  app.get("/api/me", requireAuth, getMeHandler);
+  });
 
   // Get the company for the authenticated user
   app.get("/api/auth/company", requireAuth, async (req, res) => {
@@ -667,6 +698,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   app.get("/api/catalog/categories", getCategoriesHandler);
   app.get("/api/categories", getCategoriesHandler);
+  app.get("/api/device-categories", getCategoriesHandler);
 
   // Get brands (unique brands from device models)
   app.get("/api/brands", async (req, res) => {
@@ -782,6 +814,61 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       console.error("Get models error:", error);
       res.status(500).json({ error: "Failed to get models" });
+    }
+  });
+
+  // Alias for frontend compatibility
+  app.get("/api/device-models", async (req, res) => {
+    try {
+      const { brandId } = req.query;
+      const models = await storage.getAllDeviceModels();
+      
+      // If no brandId, return all models
+      if (!brandId || typeof brandId !== 'string') {
+        const result = models.map(m => ({
+          id: m.id,
+          brandId: `brand-${m.brand.toLowerCase().replace(/\s+/g, '-')}`,
+          name: m.marketingName || m.name,
+          slug: m.slug,
+          year: null,
+        }));
+        return res.json(result);
+      }
+      
+      // Extract brand name from brandId
+      let brandName = '';
+      if (brandId.startsWith('brand-')) {
+        const brandPart = brandId.replace('brand-', '');
+        if (/^\d+$/.test(brandPart)) {
+          const brandsSet = new Set(models.map(m => m.brand));
+          const brandsArray = Array.from(brandsSet).sort();
+          const index = parseInt(brandPart, 10);
+          brandName = brandsArray[index] || '';
+        } else {
+          brandName = brandPart.charAt(0).toUpperCase() + brandPart.slice(1);
+        }
+      }
+      
+      if (!brandName) {
+        return res.json([]);
+      }
+      
+      const filteredModels = models.filter(m => 
+        m.brand.toLowerCase() === brandName.toLowerCase()
+      );
+      
+      const result = filteredModels.map(m => ({
+        id: m.id,
+        brandId: `brand-${m.brand.toLowerCase().replace(/\s+/g, '-')}`,
+        name: m.marketingName || m.name,
+        slug: m.slug,
+        year: null,
+      }));
+      
+      res.json(result);
+    } catch (error: any) {
+      console.error("Get device-models error:", error);
+      res.status(500).json({ error: "Failed to get device models" });
     }
   });
 
@@ -941,10 +1028,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // ==================== ORDER ROUTES ====================
   
-  // Create order from cart
-  app.post("/api/orders", requireAuth, async (req, res) => {
+  // Create order from cart (public endpoint - no auth required for sell page)
+  app.post("/api/orders", async (req, res) => {
     try {
       const { paymentMethod, shippingAddressId, billingAddressId, notes } = req.body;
+
+      // Check if user is authenticated
+      const userId = req.session.userId;
+      
+      // If no userId in session, allow guest checkout
+      if (!userId) {
+        // For guest orders (sell page), we need different logic
+        // This should be handled by /api/submit-order endpoint
+        return res.status(400).json({ 
+          error: "Please use /api/submit-order endpoint for guest orders" 
+        });
+      }
 
       // Validate required fields
       if (!shippingAddressId) {
@@ -960,7 +1059,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(503).json({ error: "Card payment is not available. Please select another payment method." });
       }
 
-      const cart = await storage.getCartByUserId(req.session.userId!);
+      const cart = await storage.getCartByUserId(userId);
       if (!cart) {
         return res.status(400).json({ error: "Cart not found" });
       }
@@ -987,7 +1086,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const order = await storage.createOrder({
         orderNumber,
         companyId: cart.companyId,
-        createdByUserId: req.session.userId!,
+        createdByUserId: userId,
         status: "pending_payment",
         subtotal: subtotal.toFixed(2),
         shippingCost: shippingCost.toFixed(2),
@@ -2348,6 +2447,104 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       console.error("Create ticket error:", error);
       res.status(500).json({ error: "Failed to create ticket" });
+    }
+  });
+
+  // ==================== ADMIN ENDPOINTS ====================
+  
+  // Admin dashboard stats
+  app.get("/api/admin/dashboard-stats", requireAdmin, async (req, res) => {
+    try {
+      const { eq, and, sql } = await import("drizzle-orm");
+      
+      // Get all orders to calculate stats
+      const allOrders = await db.select().from(schema.orders);
+      
+      // Calculate total revenue
+      const totalRevenue = allOrders.reduce((sum, order) => {
+        return sum + parseFloat(order.totalAmount || "0");
+      }, 0);
+      
+      // Count orders by status
+      const totalOrders = allOrders.length;
+      const pendingOrders = allOrders.filter(o => 
+        o.status === "pending_approval" || 
+        o.status === "approved" || 
+        o.status === "processing"
+      ).length;
+      const completedOrders = allOrders.filter(o => o.status === "completed").length;
+      
+      // Get company stats
+      const allCompanies = await db.select().from(schema.companies);
+      const totalCompanies = allCompanies.length;
+      const activeCompanies = allCompanies.filter(c => c.status === "active").length;
+      
+      // Get user stats
+      const allUsers = await db.select().from(schema.users);
+      const totalUsers = allUsers.length;
+      const activeUsers = allUsers.filter(u => u.isActive).length;
+      
+      res.json({
+        totalRevenue,
+        totalOrders,
+        pendingOrders,
+        completedOrders,
+        totalCompanies,
+        activeCompanies,
+        totalUsers,
+        activeUsers,
+      });
+    } catch (error: any) {
+      console.error("Dashboard stats error:", error);
+      res.status(500).json({ error: "Failed to get dashboard stats" });
+    }
+  });
+
+  // Admin quick stats
+  app.get("/api/admin/quick-stats", requireAdmin, async (req, res) => {
+    try {
+      const { gte, and } = await import("drizzle-orm");
+      
+      // Get orders from today
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      const allOrders = await db.select().from(schema.orders);
+      
+      const ordersToday = allOrders.filter(o => {
+        const orderDate = new Date(o.createdAt);
+        return orderDate >= today;
+      }).length;
+      
+      // Get orders from this month
+      const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+      const ordersThisMonth = allOrders.filter(o => {
+        const orderDate = new Date(o.createdAt);
+        return orderDate >= firstDayOfMonth;
+      }).length;
+      
+      // Calculate revenue for today and this month
+      const revenueToday = allOrders
+        .filter(o => new Date(o.createdAt) >= today)
+        .reduce((sum, o) => sum + parseFloat(o.totalAmount || "0"), 0);
+      
+      const revenueThisMonth = allOrders
+        .filter(o => new Date(o.createdAt) >= firstDayOfMonth)
+        .reduce((sum, o) => sum + parseFloat(o.totalAmount || "0"), 0);
+      
+      // Get pending approvals
+      const pendingApprovals = allOrders.filter(o => o.status === "pending_approval").length;
+      
+      res.json({
+        ordersToday,
+        ordersThisMonth,
+        revenueToday,
+        revenueThisMonth,
+        pendingApprovals,
+      });
+    } catch (error: any) {
+      console.error("Quick stats error:", error);
+      res.status(500).json({ error: "Failed to get quick stats" });
     }
   });
 
